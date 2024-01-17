@@ -46,6 +46,12 @@ class StreamsTracker:
   
   def get_stream (self, id):
     return self.streams.get(id, None)
+
+  def remove_stream (self, id):
+    try:
+      return self.streams.pop(id)
+    except:
+      return False
   
   def add_stream (self, *args, **kwargs):
     stream = StreamStatus(*args, **kwargs)

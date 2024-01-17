@@ -1,7 +1,7 @@
 import requests
 
 def call_rpc_method (method, params={}, id=1):
-  r = requests.post("http://0.0.0.0:8080", json={
+  r = requests.post("http://0.0.0.0:8000/bss/", json={
     "id": id,
       "jsonrpc": "2.0",
       "method": method,
