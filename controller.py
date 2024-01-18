@@ -56,7 +56,7 @@ class BSSController (JSONRPCHandler):
 
     if not receiver.receiver_stream_override and "stream_id" in status:
       receive_status = ReceiveStatus(status)
-      receiver.add_status(receive_status)
+      receivers_tracker.add_status(receiver, receive_status)
     else:
       receiver.receiver_stream_override = False
 
@@ -105,8 +105,7 @@ class BSSController (JSONRPCHandler):
       return {"success": False}
     
     new_status : ReceiveStatus = ReceiveStatus({"stream_id": stream})
-    receiver_info.add_status(new_status)
-    receiver_info.receiver_stream_override = True
+    receivers_tracker.add_status(receiver_info, new_status, override=True)
     return {"success": True}
 
   def _exec_disjoin_receiver (self, receiver: str, stream: str):
@@ -122,8 +121,7 @@ class BSSController (JSONRPCHandler):
     if receiver_info is None:
       return {"success": False}
     
-    receiver_info.add_status(None)
-    receiver_info.receiver_stream_override = True
+    receivers_tracker.add_status(receiver_info, None, override=True)
     return {"success": True}
 
   def _exec_destroy_stream (self, stream_id: str):
