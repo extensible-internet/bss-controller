@@ -41,8 +41,8 @@ class ReceiverInfo:
     }
 
 class ReceiversTracker:
-  STALE_THREAD_SLEEP = 2
-  DEAD_ROLL_CALL_INTERVAL = 5
+  STALE_THREAD_SLEEP = 10
+  DEAD_ROLL_CALL_INTERVAL = 50
 
   def __init__ (self, filename="receivers.db"):
     self.receivers : dict[str, ReceiverInfo] = dbm.open(filename, "n")

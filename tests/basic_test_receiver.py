@@ -7,7 +7,7 @@ def call_rpc_method (method, params={}, id=1):
       "method": method,
       "params": params
   })
-  return r.json()
+  return r.json()["response"]
 
 res = call_rpc_method("create_stream", {"stream_note": "Hello World"})
 

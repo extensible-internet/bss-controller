@@ -10,14 +10,22 @@ log = core.getLogger()
 class BSSController (JSONRPCHandler):
   def __init__ (self, *args, **kwargs):
     super().__init__(*args, **kwargs)
+  
+  @classmethod
+  def get_response(cls, **kwargs):
+    return {
+      "response": kwargs
+    }
+
+  def _exec_hello (self):
+    return BSSController.get_response(success=True)
 
   def _exec_create_stream (self, stream_note: str = ""):
     """
     Creates stream and returns stream id. Used by sender.
     """
-    return {
-      "stream_id": streams_tracker.add_stream(note= stream_note).id
-    }
+    return BSSController.get_response(
+      stream_id= streams_tracker.add_stream(note= stream_note).id)
 
   def _exec_update_stream (self, stream_id: str, lowest_block_at_sender: int, 
                            highest_block: int, highest_block_time: int, finished: bool,
@@ -35,7 +43,7 @@ class BSSController (JSONRPCHandler):
     """
     stream : StreamStatus = streams_tracker.get_stream(stream_id)
     if stream is None:
-      return {"success": False}
+      return BSSController.get_response(success=False)
 
     stream.update_stream({
       "lowest_block_at_sender": lowest_block_at_sender,
@@ -44,7 +52,7 @@ class BSSController (JSONRPCHandler):
       "finished": finished,
       "blocks_per_second": blocks_per_second
     })
-    return {"success": True}
+    return BSSController.get_response(success=False)
 
   def _exec_receiver_rollcall (self, info, status):
     """
@@ -61,35 +69,34 @@ class BSSController (JSONRPCHandler):
       receiver.receiver_stream_override = False
 
     if receiver.current_status is not None:
-      return {
-        "status": streams_tracker.get_stream(receiver.current_status.stream_id).to_dict()
-      }
+      return BSSController.get_response(
+        status= streams_tracker.get_stream(receiver.current_status.stream_id).to_dict()
+      )
     else:
-      return {"status": None}
+      return BSSController.get_response(status=None)
 
   def _exec_get_streams_status (self):
     """
     Get a list of `StreamStatus` objects
     """
-    return {
-      "status": [
+    return BSSController.get_response(
+      status= [
         status.to_dict() for status in streams_tracker.get_streams()
       ]
-    }
+    )
 
   def _exec_get_receivers_status (self):
     """
     Get a list of objects which each have a `ReceiverInfo` per receiver and
       a `ReceiveStatus` for info for its active stream
     """
-    return {
-      "status": [
-        {
+    return BSSController.get_response(
+        status= [{
           "receiver": receiver.to_dict(),
           "status": receiver.current_status.to_dict() if receiver.current_status else None 
         } for receiver in receivers_tracker.get_receivers()
       ]
-    }
+    )
 
   def _exec_join_receiver (self, receiver: str, stream: str):
     """
@@ -102,11 +109,11 @@ class BSSController (JSONRPCHandler):
     """
     receiver_info: ReceiverInfo = receivers_tracker.get_receiver(receiver)
     if receiver_info is None:
-      return {"success": False}
+      return BSSController.get_response(success=False)
     
     new_status : ReceiveStatus = ReceiveStatus({"stream_id": stream})
     receivers_tracker.add_status(receiver_info, new_status, override=True)
-    return {"success": True}
+    return BSSController.get_response(success=True)
 
   def _exec_disjoin_receiver (self, receiver: str, stream: str):
     """
@@ -119,10 +126,10 @@ class BSSController (JSONRPCHandler):
     """
     receiver_info: ReceiverInfo = receivers_tracker.get_receiver(receiver)
     if receiver_info is None:
-      return {"success": False}
+      return BSSController.get_response(success=False)
     
     receivers_tracker.add_status(receiver_info, None, override=True)
-    return {"success": True}
+    return BSSController.get_response(success=True)
 
   def _exec_destroy_stream (self, stream_id: str):
     """
@@ -133,6 +140,8 @@ class BSSController (JSONRPCHandler):
     """
     stream: StreamStatus = streams_tracker.get_stream(stream_id)
     if stream is None:
-      return {"success": False}
+      return BSSController.get_response(success=False)
     
-    return {"success": streams_tracker.remove_stream(stream_id)}
+    return BSSController.get_response(
+      success=streams_tracker.remove_stream(stream_id)
+    )
