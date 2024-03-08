@@ -70,7 +70,7 @@ class BSSController (JSONRPCHandler):
     else:
       receiver.receiver_stream_override = False
 
-    if receiver.current_status is not None:
+    if receiver.current_status is not None and receiver.current_status.stream_id != "":
       return BSSController.get_response(
         status= streams_tracker.get_stream(receiver.current_status.stream_id).to_dict()
       )
