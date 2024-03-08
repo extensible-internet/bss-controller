@@ -9,6 +9,7 @@ def call_rpc_method (method, params={}, id=1):
   })
   return r.json()["response"]
 
+print("Starting test ...")
 res = call_rpc_method("create_stream", {"stream_note": "Hello World"})
 
 stream_id = res["stream_id"]
@@ -39,3 +40,6 @@ assert rollcall_res["status"]["stream_id"] == stream_id
 list_of_receivers = call_rpc_method("get_receivers_status")["status"]
 print(f'Get Receivers Status: {list_of_receivers}')
 assert len(list_of_receivers) == 1 and list_of_receivers[0]["receiver"]["receiver_id"] == receiver_id
+
+sample_uuid = call_rpc_method("get_uuid")["uuid"]
+assert sample_uuid != ""

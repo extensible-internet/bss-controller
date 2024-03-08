@@ -1,6 +1,6 @@
 from pox.core import core
 import time
-import uuid
+from .uuid_tracker import UUIDTracker
 import dbm
 import pickle
 
@@ -9,14 +9,14 @@ log = core.getLogger()
 class StreamStatus:
   default_time = 0
 
-  def __init__ (self, note):
+  def __init__ (self, id, note):
     self.note = note
-    self.id = uuid.uuid4().hex
+    self.id = id
     self.creation_time = time.time()
     self.update_stream()
   
   def update_stream (self, update_object = {}):
-    self.current_source = [0, 0, 0]
+    self.current_source = update_object.get("current_source", [0, 0, 0])
     
     # 0 in this field indicates there are no blocks at sender
     self.lowest_block_at_sender = update_object.get("lowest_block_at_sender", 0)
@@ -43,14 +43,21 @@ class StreamStatus:
     }
 
 class StreamsTracker:
-  def __init__ (self, filename="streams.db"):
+  def __init__ (self, uuid_tracker: UUIDTracker, filename="streams.db"):
     self.streams : dict[str, StreamStatus] = dbm.open(filename, "n")
+    self.uuid_tracker = uuid_tracker
+    uuid_tracker.add_store(self.streams)
 
   def get_stream (self, id):
     stream = self.streams.get(id, None)
     if stream is None:
       return None
     return pickle.loads(stream)
+
+  def update_stream(self, obj: StreamStatus, to_update):
+    # Trust that obj is in self.streams
+    obj.update_stream(to_update)
+    self.streams[obj.id] = pickle.dumps(obj)
 
   def remove_stream (self, id):
     try:
@@ -60,7 +67,7 @@ class StreamsTracker:
       return False
 
   def add_stream (self, *args, **kwargs):
-    stream = StreamStatus(*args, **kwargs)
+    stream = StreamStatus(self.uuid_tracker.get_uuid(), *args, **kwargs)
     self.streams[stream.id] = pickle.dumps(stream)
     return stream
 

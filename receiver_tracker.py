@@ -3,6 +3,7 @@ import time
 import threading
 import dbm
 import pickle
+from .uuid_tracker import UUIDTracker
 
 log = core.getLogger()
 
@@ -44,9 +45,11 @@ class ReceiversTracker:
   STALE_THREAD_SLEEP = 10
   DEAD_ROLL_CALL_INTERVAL = 50
 
-  def __init__ (self, filename="receivers.db"):
+  def __init__ (self, uuid_tracker: UUIDTracker, filename="receivers.db"):
     self.receivers : dict[str, ReceiverInfo] = dbm.open(filename, "n")
     self.receivers_lock = threading.Lock()
+    self.uuid_tracker = uuid_tracker
+    uuid_tracker.add_store(self.receivers)
     self.roll_call_update()
 
   def __del__ (self):

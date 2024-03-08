@@ -2,9 +2,11 @@ from pox.core import core
 from pox.web.jsonrpc import JSONRPCHandler
 from .receiver_tracker import ReceiversTracker, ReceiverInfo, ReceiveStatus
 from .stream_tracker import StreamsTracker, StreamStatus
+from .uuid_tracker import UUIDTracker
 
-receivers_tracker = ReceiversTracker()
-streams_tracker = StreamsTracker()
+uuid_tracker = UUIDTracker()
+receivers_tracker = ReceiversTracker(uuid_tracker)
+streams_tracker = StreamsTracker(uuid_tracker)
 log = core.getLogger()
 
 class BSSController (JSONRPCHandler):
@@ -45,14 +47,14 @@ class BSSController (JSONRPCHandler):
     if stream is None:
       return BSSController.get_response(success=False)
 
-    stream.update_stream({
+    streams_tracker.update_stream(stream, {
       "lowest_block_at_sender": lowest_block_at_sender,
       "highest_block": highest_block,
       "highest_block_time": highest_block_time,
       "finished": finished,
       "blocks_per_second": blocks_per_second
     })
-    return BSSController.get_response(success=False)
+    return BSSController.get_response(success=True)
 
   def _exec_receiver_rollcall (self, info, status):
     """
@@ -144,4 +146,13 @@ class BSSController (JSONRPCHandler):
     
     return BSSController.get_response(
       success=streams_tracker.remove_stream(stream_id)
+    )
+    
+  def _exec_get_uuid (self):
+    """
+    Get a uuid guaranteed to be unique amongst the receivers and the streams
+    """
+    uuid_str = uuid_tracker.get_uuid()
+    return BSSController.get_response(
+      uuid= uuid_str
     )
