@@ -1,50 +1,59 @@
 from pox.core import core
 import time
 from .uuid_tracker import UUIDTracker
-import dbm
+import dbm.gnu
 import pickle
+import uuid
 
 log = core.getLogger()
 
 class StreamStatus:
   default_time = 0
 
-  def __init__ (self, id, note):
-    self.note = note
+  def __init__ (self, id):
     self.id = id
     self.creation_time = time.time()
     self.update_stream()
-  
+
   def update_stream (self, update_object = {}):
-    self.current_source = update_object.get("current_source", [0, 0, 0])
-    
-    # 0 in this field indicates there are no blocks at sender
-    self.lowest_block_at_sender = update_object.get("lowest_block_at_sender", 0)
-    
-    self.highest_block = update_object.get("highest_block", 0)
-    self.blocks_per_second = update_object.get("blocks_per_second", 0.)
-    self.highest_block_time = update_object.get("highest_block_time", StreamStatus.default_time)
-  
+    defaults = {
+      "lowest_block": 0,
+      "highest_block": 100,
+      "highest_block_time": StreamStatus.default_time,
+      "owner": True,
+      "finished": False,
+      "current_source": [0,0,0],
+      "missing_blocks": [],
+      "note": None
+    }
+
+    for k in defaults:
+      if hasattr(self, k) and k in update_object: # field already defined overriden by update
+        setattr(self, k, update_object[k])
+      elif not hasattr(self, k):
+        setattr(self, k, update_object.get(k, defaults[k]))
+
   def to_dict (self):
     return {
       "stream_id": self.id,
-      "stream_note": self.note,
       
       **{
         key: getattr(self, key) for key in [
-          "blocks_per_second",
-          "creation_time",
-          "current_source",
-          "lowest_block_at_sender",
+          "note",
+          "lowest_block",
           "highest_block",
-          "highest_block_time"
+          "highest_block_time",
+          "owner",
+          "finished",
+          "current_source",
+          "missing_blocks"
         ]
       }
     }
 
 class StreamsTracker:
   def __init__ (self, uuid_tracker: UUIDTracker, filename="streams.db"):
-    self.streams : dict[str, StreamStatus] = dbm.open(filename, "n")
+    self.streams : dict[str, StreamStatus] = dbm.gnu.open(filename, "n")
     self.uuid_tracker = uuid_tracker
     uuid_tracker.add_store(self.streams)
 
@@ -66,8 +75,10 @@ class StreamsTracker:
     except KeyError:
       return False
 
-  def add_stream (self, *args, **kwargs):
-    stream = StreamStatus(self.uuid_tracker.get_uuid(), *args, **kwargs)
+  def add_stream (self, uuid_stream, *args, **kwargs):
+    if self.uuid_tracker.uuid_in_kv_stores(uuid_stream):
+      return None
+    stream = StreamStatus(uuid_stream, *args, **kwargs)
     self.streams[stream.id] = pickle.dumps(stream)
     return stream
 

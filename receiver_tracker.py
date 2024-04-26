@@ -1,7 +1,7 @@
 from pox.core import core
 import time
 import threading
-import dbm
+import dbm.gnu
 import pickle
 from .uuid_tracker import UUIDTracker
 
@@ -30,7 +30,7 @@ class ReceiverInfo:
     self.note : str = receiver_obj.get("receiver_note", "")
     self.first_hop: list[int] = receiver_obj.get("first_hop", [0,0,0])
     self.last_rollcall: float = roll_call_timestamp
-    self.current_status: ReceiveStatus = None
+    self.current_statuses: list[ReceiveStatus] = []
     self.receiver_stream_override: bool = False
 
   def to_dict (self):
@@ -46,7 +46,7 @@ class ReceiversTracker:
   DEAD_ROLL_CALL_INTERVAL = 50
 
   def __init__ (self, uuid_tracker: UUIDTracker, filename="receivers.db"):
-    self.receivers : dict[str, ReceiverInfo] = dbm.open(filename, "n")
+    self.receivers : dict[str, ReceiverInfo] = dbm.gnu.open(filename, "n")
     self.receivers_lock = threading.Lock()
     self.uuid_tracker = uuid_tracker
     uuid_tracker.add_store(self.receivers)
@@ -63,7 +63,7 @@ class ReceiversTracker:
       return None
     return pickle.loads(receiver)
 
-  def get_receivers (self):
+  def get_receivers (self) -> list[ReceiverInfo]:
     #TODO: pagination?
     receiver_list = []
     with self.receivers_lock:
@@ -79,7 +79,7 @@ class ReceiversTracker:
       receiver = pickle.loads(self.receivers[receiver_id])
       if (receiver.last_rollcall
             <= time.time() - ReceiversTracker.DEAD_ROLL_CALL_INTERVAL 
-          and receiver.current_status is None):
+          and receiver.current_statuses == []):
         with self.receivers_lock:
           del self.receivers[receiver_id]
 
@@ -95,10 +95,30 @@ class ReceiversTracker:
     receiver_info_obj.last_rollcall = roll_call_timestamp
     self.persist(receiver_info_obj)
 
-  def add_status (self, receiver_info_obj, status: ReceiveStatus, override=False):
-    receiver_info_obj.current_status = status
-    receiver_info_obj.receiver_stream_override = override
+  def add_status (self, receiver_info_obj: ReceiverInfo, status: ReceiveStatus) -> None:
+    new_statuses = []
+    found = False
+    for status_obj in receiver_info_obj.current_statuses:
+      if status_obj.stream_id == status.stream_id:
+        # This is an update for an existing subscription, replace it
+        found = True
+        new_statuses.append(status)
+      else:
+        new_statuses.append(status_obj)
+    
+    if not found:
+      new_statuses.append(status)
+        
+    receiver_info_obj.current_statuses = new_statuses
     self.persist(receiver_info_obj)
+  
+  def remove_status (self, receiver_info_obj: ReceiverInfo, stream_id: str) -> bool:
+    new_statuses = filter(lambda status_obj: status_obj.stream_id != stream_id, receiver_info_obj.current_statuses)
+    if len(new_statuses) < receiver_info_obj.current_statuses:
+      receiver_info_obj.current_statuses = new_statuses
+      self.persist(receiver_info_obj)
+      return True
+    return False
 
   def receiver_rollcall (self, receiver):
     essential_keys = ["receiver_id"] # keys needed in object

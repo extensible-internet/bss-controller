@@ -1,4 +1,5 @@
 import requests
+#TODO: naye rollcall ka implementation, redo this, spec go over
 
 def call_rpc_method (method, params={}, id=1):
   r = requests.post("http://0.0.0.0:8000/bss/", json={
@@ -7,12 +8,16 @@ def call_rpc_method (method, params={}, id=1):
       "method": method,
       "params": params
   })
-  return r.json()["response"]
+  res = r.json()
+  assert "response" in res
+  return res["response"]
 
 print("Starting test ...")
-res = call_rpc_method("create_stream", {"stream_note": "Hello World"})
 
-stream_id = res["stream_id"]
+stream_id = call_rpc_method("get_uuid")["uuid"]
+res = call_rpc_method("create_stream", {"uuid": stream_id})
+
+assert res["success"]
 receiver_id = "test_receiver"
 
 list_of_streams = call_rpc_method("get_streams_status")["status"]
@@ -23,7 +28,7 @@ rollcall_res = call_rpc_method("receiver_rollcall", {
           "info": {
             "receiver_id": receiver_id
           },
-          "status": {}
+          "streams": []
       })
 
 res = call_rpc_method("join_receiver", {"stream": stream_id, "receiver": receiver_id})
@@ -33,9 +38,10 @@ rollcall_res = call_rpc_method("receiver_rollcall", {
           "info": {
             "receiver_id": receiver_id
           },
-          "status": rollcall_res["status"]
+          "streams": rollcall_res["joined_streams"]
       })
-assert rollcall_res["status"]["stream_id"] == stream_id
+assert len(rollcall_res["joined_streams"]) == 1
+assert rollcall_res["joined_streams"][0]["stream_id"] == stream_id
 
 list_of_receivers = call_rpc_method("get_receivers_status")["status"]
 print(f'Get Receivers Status: {list_of_receivers}')
