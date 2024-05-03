@@ -129,7 +129,7 @@ class BSSController (JSONRPCHandler):
     for status in streams:
       if "stream_id" in status:
         receive_status = ReceiveStatus(status)
-        receivers_tracker.add_status(receiver, receive_status)
+        receivers_tracker.update_status(receiver, receive_status)
 
     current_stream_statuses = [streams_tracker.get_stream(current_status.stream_id).to_dict()
                                for current_status in receiver.current_statuses]

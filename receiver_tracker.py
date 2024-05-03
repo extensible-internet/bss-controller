@@ -91,9 +91,18 @@ class ReceiversTracker:
     # Called on a change to an object stored under the tracker
     self.receivers[receiver_info_obj.id] = pickle.dumps(receiver_info_obj)
 
-  def refresh (self, receiver_info_obj, roll_call_timestamp):
-    receiver_info_obj.last_rollcall = roll_call_timestamp
+  def refresh (self, receiver_info_obj, new_obj, fields = ["note", "first_hop", "last_rollcall"]):
+    for field in fields:
+      setattr(receiver_info_obj, field, getattr(new_obj, field))
     self.persist(receiver_info_obj)
+  
+  def update_status (self, receiver_info_obj: ReceiverInfo, status: ReceiveStatus) -> None:
+    for status_obj_index in range(len(receiver_info_obj.current_statuses)):
+      status_obj = receiver_info_obj.current_statuses[status_obj_index]
+      if status_obj.stream_id == status.stream_id:
+        new_statuses = receiver_info_obj.current_statuses[:status_obj_index] + [status] + receiver_info_obj.current_statuses[status_obj_index+1:]
+        receiver_info_obj.current_statuses = new_statuses
+        self.persist(receiver_info_obj)
 
   def add_status (self, receiver_info_obj: ReceiverInfo, status: ReceiveStatus) -> None:
     new_statuses = []
@@ -113,8 +122,8 @@ class ReceiversTracker:
     self.persist(receiver_info_obj)
   
   def remove_status (self, receiver_info_obj: ReceiverInfo, stream_id: str) -> bool:
-    new_statuses = filter(lambda status_obj: status_obj.stream_id != stream_id, receiver_info_obj.current_statuses)
-    if len(new_statuses) < receiver_info_obj.current_statuses:
+    new_statuses = list(filter(lambda status_obj: status_obj.stream_id != stream_id, receiver_info_obj.current_statuses))
+    if len(new_statuses) < len(receiver_info_obj.current_statuses):
       receiver_info_obj.current_statuses = new_statuses
       self.persist(receiver_info_obj)
       return True
@@ -128,11 +137,11 @@ class ReceiversTracker:
 
     receiver_id = receiver["receiver_id"]
     with self.receivers_lock:
+      new_obj = ReceiverInfo(receiver, time.time())
       if receiver_id not in self.receivers:
-        obj = ReceiverInfo(receiver, time.time())
-        self.persist(obj)
+        self.persist(new_obj)
+        return new_obj
       else:
-        obj = pickle.loads(self.receivers[receiver_id])
-        self.refresh(obj, time.time())
-
-    return obj
+        old_obj = pickle.loads(self.receivers[receiver_id])
+        self.refresh(old_obj, new_obj)
+        return old_obj
