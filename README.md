@@ -225,7 +225,8 @@ Response:
 - Request:
 ```json
 {
-  "stream_id": "[Hex UUID]"
+  "receiver": "[Hex UUID]",
+  "stream": "[Hex UUID]"
 }
 ```
 - Response:
@@ -242,7 +243,8 @@ Response:
 - Request:
 ```json
 {
-  "stream_id": "[Hex UUID]"
+  "receiver": "[Hex UUID]",
+  "stream": "[Hex UUID]"
 }
 ```
 - Response:
@@ -259,6 +261,11 @@ Response:
 - Request:
 ```json
 {
+  "info": {
+    "receiver_id": "[Hex UUID]", // Only field truly required in info
+    "first_hop": [1, 5, 10],
+    "receiver_note": "Some note"
+  },
   "streams": [
     {
       "stream_id": "[Hex UUID]",
@@ -269,8 +276,7 @@ Response:
       "missing_blocks": [35, 42], // Blocks the receiver is missing
       "current_source": [2, 5, 7], // What the receiver thinks the source is
     },
-  ],
-  "current_dsp": [1, 5, 10]
+  ]
 }
 ```
 - Response:
@@ -278,8 +284,9 @@ Response:
 {
   "receiver_status": {
     "reciever_id": "[Hex UUID]",
+    "first_hop": [1, 5, 10],
     "receiver_note": "A note, if the receiver has any",
-    "last_checkin": 918573830 // Last rollcall time at controller
+    "last_rollcall": 918573830 // Last rollcall time at controller
   },
   "joined_streams": [
     {
