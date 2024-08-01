@@ -18,13 +18,12 @@ class StreamStatus:
   def update_stream (self, update_object = {}):
     defaults = {
       "lowest_block": 0,
-      "highest_block": 100,
+      "highest_block": 0,
       "highest_block_time": StreamStatus.default_time,
-      "owner": True,
       "finished": False,
       "current_source": [0,0,0],
       "missing_blocks": [],
-      "note": None
+      "note": None,
     }
 
     for k in defaults:
@@ -36,17 +35,17 @@ class StreamStatus:
   def to_dict (self):
     return {
       "stream_id": self.id,
-      
+
       **{
         key: getattr(self, key) for key in [
           "note",
           "lowest_block",
           "highest_block",
           "highest_block_time",
-          "owner",
           "finished",
           "current_source",
-          "missing_blocks"
+          "missing_blocks",
+          "creation_time",
         ]
       }
     }

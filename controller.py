@@ -12,7 +12,7 @@ log = core.getLogger()
 class BSSController (JSONRPCHandler):
   def __init__ (self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-  
+
   @classmethod
   def get_response(cls, **kwargs):
     return {
@@ -21,7 +21,7 @@ class BSSController (JSONRPCHandler):
 
   def _exec_hello (self):
     return BSSController.get_response(success=True)
-  
+
   def _exec_get_uuid (self):
     return BSSController.get_response(uuid=uuid_tracker.get_uuid())
 
@@ -31,25 +31,29 @@ class BSSController (JSONRPCHandler):
     """
     created_stream = streams_tracker.add_stream(uuid_stream=uuid)
     return BSSController.get_response(success=created_stream is not None)
-  
-  def update_stream (self, stream_id: str, lowest_block: int, 
-                           highest_block: int, highest_block_time: int, owner: bool,
-                           finished: bool, missing_blocks: list[int], current_source: list[int]):
+
+  def update_stream (self, stream_id: str, lowest_block: int,
+                           highest_block: int, highest_block_time: int,
+                           finished: bool, missing_blocks: list[int], current_source: list[int],
+                           **kwargs):
     stream : StreamStatus = streams_tracker.get_stream(stream_id)
+    log.info("Updating stream %s" % stream_id)
     if stream is None:
-      return BSSController.get_response(success=False)
+      log.info("Stream ID not found. Creating...")
+      stream = streams_tracker.add_stream(uuid_stream=stream_id)
+      if stream is None:
+        return False
 
     streams_tracker.update_stream(stream, {
       "lowest_block": lowest_block,
       "highest_block": highest_block,
       "highest_block_time": highest_block_time,
-      "owner": owner,
       "finished": finished,
       "missing_blocks": missing_blocks,
       "current_source": current_source
     })
-    return BSSController.get_response(success=True)
-    
+    return True
+
 
   def _exec_update_stream (self, **kwargs):
     """
@@ -60,7 +64,7 @@ class BSSController (JSONRPCHandler):
         lowest_block (int): Lowest block # at sender (that was just pushed)
         highest_block (int): Highest block # at sender
         highest_block_time (int): Timestamp for the highest block #
-        owner (bool): True if owner/source of stream, false if receiver
+        creation_time (int): Timestamp for when stream was created at sender
         finished (bool): Whether the stream is finished
         missing_blocks (list[int]): Block #s that are missing
         current_source (list[int]): DSP of the current source reperesented as an array of three integers
@@ -69,7 +73,7 @@ class BSSController (JSONRPCHandler):
       return BSSController.get_response(success=self.update_stream(**kwargs))
     except TypeError: # probably because a required field is not given in kwargs
       return BSSController.get_response(success=False)
-  
+
   def _exec_update_streams (self, streams: list):
     """
     Method used by senders to update multiple streams at once
@@ -85,21 +89,21 @@ class BSSController (JSONRPCHandler):
       except TypeError: # presumably because obj is incomplete
         pass
       update_list.append(update)
-        
+
     return BSSController.get_response(update_list=update_list)
-  
+
   def _exec_delete_stream (self, stream_id: str, owner: bool, finished: bool, current_source: list[int]):
     """
     Deletes stream corresponding to the stream_id. First verifies if it is finished.
     """
     if not owner or not finished:
       return BSSController.get_response(success=False)
-    
+
     # verify finished in stream tracker
     stream : StreamStatus = streams_tracker.get_stream(stream_id)
     if stream is None or not stream.finished: # No such stream or stream exists but is not finished
       return BSSController.get_response(success=False)
-    
+
     return BSSController.get_response(success=streams_tracker.remove_stream(stream_id))
 
   def _exec_set_note (self, stream_id: str, note: str):
@@ -125,7 +129,7 @@ class BSSController (JSONRPCHandler):
     This is the only method used by receivers
     """
     receiver : ReceiverInfo = receivers_tracker.receiver_rollcall(info)
-    
+
     for status in streams:
       if "stream_id" in status:
         receive_status = ReceiveStatus(status)
@@ -133,7 +137,7 @@ class BSSController (JSONRPCHandler):
 
     current_stream_statuses = [streams_tracker.get_stream(current_status.stream_id).to_dict()
                                for current_status in receiver.current_statuses]
-      
+
     return BSSController.get_response(receiver_status=receiver.to_dict(), joined_streams=current_stream_statuses)
 
   def _exec_get_streams_status (self):
@@ -180,7 +184,7 @@ class BSSController (JSONRPCHandler):
     receiver_info: ReceiverInfo = receivers_tracker.get_receiver(receiver)
     if receiver_info is None:
       return BSSController.get_response(success=False)
-    
+
     new_status : ReceiveStatus = ReceiveStatus({"stream_id": stream})
     receivers_tracker.add_status(receiver_info, new_status)
     return BSSController.get_response(success=True)
@@ -210,11 +214,11 @@ class BSSController (JSONRPCHandler):
   #   stream: StreamStatus = streams_tracker.get_stream(stream_id)
   #   if stream is None:
   #     return BSSController.get_response(success=False)
-    
+
   #   return BSSController.get_response(
   #     success=streams_tracker.remove_stream(stream_id)
   #   )
-    
+
   # def _exec_get_uuid (self):
   #   """
   #   Get a uuid guaranteed to be unique amongst the receivers and the streams
