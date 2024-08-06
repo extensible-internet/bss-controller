@@ -136,7 +136,8 @@ class BSSController (JSONRPCHandler):
         receivers_tracker.update_status(receiver, receive_status)
 
     current_stream_statuses = [streams_tracker.get_stream(current_status.stream_id).to_dict()
-                               for current_status in receiver.current_statuses]
+                               for current_status in receiver.current_statuses
+                               if streams_tracker.get_stream(current_status.stream_id) is not None]
 
     return BSSController.get_response(receiver_status=receiver.to_dict(), joined_streams=current_stream_statuses)
 
@@ -183,6 +184,9 @@ class BSSController (JSONRPCHandler):
     """
     receiver_info: ReceiverInfo = receivers_tracker.get_receiver(receiver)
     if receiver_info is None:
+      return BSSController.get_response(success=False)
+
+    if streams_tracker.get_stream(stream) is None:
       return BSSController.get_response(success=False)
 
     new_status : ReceiveStatus = ReceiveStatus({"stream_id": stream})
