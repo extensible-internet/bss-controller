@@ -6,5 +6,5 @@ def launch (no_cookieguard=False):
     BSSController.pox_cookieguard = False
 
   def _launch ():
-    core.WebServer.set_handler("/bss/", BSSController, {}, True)
-  core.call_when_ready(_launch, ["WebServer"], name = "bss")
+    core.WebServer.set_handler("/bssctl/", BSSController, {}, True)
+  core.call_when_ready(_launch, ["WebServer"], name = "bss-controller")
