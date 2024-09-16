@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+import argparse
+import requests
+import json
+
+def call_rpc_method (endpoint, method, params, id, verbose=False):
+  json_body = {
+    "id": id,
+      "jsonrpc": "2.0",
+      "method": method,
+      "params": params
+  }
+  if verbose:
+    print(f"Sending json body \n{json.dumps(json_body)}\nto endpoint {endpoint}")
+  r = requests.post(endpoint, json=json_body)
+  return r.json()["response"]
+
+parser = argparse.ArgumentParser(description='Issue a request to a running BSS controller web server')
+parser.add_argument('--endpoint', "-e", dest="endpoint", default="http://0.0.0.0:8000/bss/", 
+                    help="Endpoint at which BSS controller web server is running")
+
+parser.add_argument('function', metavar='FUNC', type=str,
+                    help='Name of which JSON RPC function is to be run')
+
+parser.add_argument('--params', "-p", dest="params", default="{}", 
+                    help="Params in JSON format")
+
+parser.add_argument("--id", "-i", dest="id", default=1, type=int,
+                    help="ID field for JSON RPC")
+
+parser.add_argument("--verbose", "-v", dest="verbose", action='store_const', const=True, default=False)
+
+args = parser.parse_args()
+
+try:
+  res = call_rpc_method(args.endpoint, "hello", {}, 1)
+  if not res["success"]:
+    raise Exception()
+except:
+  print("Controller server not running on specified endpoint")
+  exit(1)
+
+try:
+  params = json.loads(args.params)
+except json.decoder.JSONDecodeError:
+  print("Invalid params JSON")
+  exit(1)
+
+response = call_rpc_method(args.endpoint, args.function, params, args.id, args.verbose)
+print("\nResponse:")
+print(response)

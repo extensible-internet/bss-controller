@@ -1,0 +1,147 @@
+from pox.core import core
+import time
+import threading
+import dbm.gnu
+import pickle
+from .uuid_tracker import UUIDTracker
+
+log = core.getLogger()
+
+class ReceiveStatus:
+  def __init__ (self, received_status_obj):
+    self.stream_id = received_status_obj["stream_id"]
+    self.lowest_received_block = received_status_obj.get("lowest_received_block", 0)
+    self.highest_received_block = received_status_obj.get("highest_received_block", 0)
+    self.highest_received_block_time = received_status_obj.get("highest_received_block_time", 0)
+    self.skipped_blocks = received_status_obj.get("skipped_blocks", 0)
+
+  def to_dict (self):
+    return {
+      "stream_id": self.stream_id,
+      "skipped_blocks": 0,
+      "lowest_received_block": self.lowest_received_block,
+      "highest_received_block": self.highest_received_block,
+      "highest_received_block_time": self.highest_received_block_time
+    }
+
+class ReceiverInfo:
+  def __init__ (self, receiver_obj, roll_call_timestamp : float):
+    self.id : str = receiver_obj["receiver_id"]
+    self.note : str = receiver_obj.get("receiver_note", "")
+    self.first_hop: list[int] = receiver_obj.get("first_hop", [0,0,0])
+    self.last_rollcall: float = roll_call_timestamp
+    self.current_statuses: list[ReceiveStatus] = []
+    self.receiver_stream_override: bool = False
+
+  def to_dict (self):
+    return {
+      "receiver_id": self.id,
+      "receiver_note": self.note,
+      "receiver_first_hop": self.first_hop,
+      "timestamp": self.last_rollcall
+    }
+
+class ReceiversTracker:
+  STALE_THREAD_SLEEP = 10
+  DEAD_ROLL_CALL_INTERVAL = 50
+
+  def __init__ (self, uuid_tracker: UUIDTracker, filename="receivers.db"):
+    self.receivers : dict[str, ReceiverInfo] = dbm.gnu.open(filename, "n")
+    self.receivers_lock = threading.Lock()
+    self.uuid_tracker = uuid_tracker
+    uuid_tracker.add_store(self.receivers)
+    self.roll_call_update()
+
+  def __del__ (self):
+    #TODO: Trigger this via POX
+    print("Destructor for ReceiversTracker is being called")
+    self.receivers.close()
+
+  def get_receiver (self, receiver_id):
+    receiver = self.receivers.get(receiver_id, None)
+    if receiver is None:
+      return None
+    return pickle.loads(receiver)
+
+  def get_receivers (self) -> list[ReceiverInfo]:
+    #TODO: pagination?
+    receiver_list = []
+    with self.receivers_lock:
+      k = self.receivers.firstkey()
+      while k is not None:
+        receiver_list.append(pickle.loads(self.receivers[k]))
+        k = self.receivers.nextkey(k)
+
+    return receiver_list
+
+  def roll_call_update (self):
+    for receiver_id in set(self.receivers.keys()):
+      receiver = pickle.loads(self.receivers[receiver_id])
+      if (receiver.last_rollcall
+            <= time.time() - ReceiversTracker.DEAD_ROLL_CALL_INTERVAL 
+          and receiver.current_statuses == []):
+        with self.receivers_lock:
+          del self.receivers[receiver_id]
+
+    print("Rollcall stale check, receivers", self.receivers)
+    core.call_delayed(ReceiversTracker.STALE_THREAD_SLEEP, 
+                      self.roll_call_update)
+
+  def persist (self, receiver_info_obj):
+    # Called on a change to an object stored under the tracker
+    self.receivers[receiver_info_obj.id] = pickle.dumps(receiver_info_obj)
+
+  def refresh (self, receiver_info_obj, new_obj, fields = ["note", "first_hop", "last_rollcall"]):
+    for field in fields:
+      setattr(receiver_info_obj, field, getattr(new_obj, field))
+    self.persist(receiver_info_obj)
+  
+  def update_status (self, receiver_info_obj: ReceiverInfo, status: ReceiveStatus) -> None:
+    for status_obj_index in range(len(receiver_info_obj.current_statuses)):
+      status_obj = receiver_info_obj.current_statuses[status_obj_index]
+      if status_obj.stream_id == status.stream_id:
+        new_statuses = receiver_info_obj.current_statuses[:status_obj_index] + [status] + receiver_info_obj.current_statuses[status_obj_index+1:]
+        receiver_info_obj.current_statuses = new_statuses
+        self.persist(receiver_info_obj)
+
+  def add_status (self, receiver_info_obj: ReceiverInfo, status: ReceiveStatus) -> None:
+    new_statuses = []
+    found = False
+    for status_obj in receiver_info_obj.current_statuses:
+      if status_obj.stream_id == status.stream_id:
+        # This is an update for an existing subscription, replace it
+        found = True
+        new_statuses.append(status)
+      else:
+        new_statuses.append(status_obj)
+    
+    if not found:
+      new_statuses.append(status)
+        
+    receiver_info_obj.current_statuses = new_statuses
+    self.persist(receiver_info_obj)
+  
+  def remove_status (self, receiver_info_obj: ReceiverInfo, stream_id: str) -> bool:
+    new_statuses = list(filter(lambda status_obj: status_obj.stream_id != stream_id, receiver_info_obj.current_statuses))
+    if len(new_statuses) < len(receiver_info_obj.current_statuses):
+      receiver_info_obj.current_statuses = new_statuses
+      self.persist(receiver_info_obj)
+      return True
+    return False
+
+  def receiver_rollcall (self, receiver):
+    essential_keys = ["receiver_id"] # keys needed in object
+    for key in essential_keys:
+      if key not in receiver:
+        return None
+
+    receiver_id = receiver["receiver_id"]
+    with self.receivers_lock:
+      new_obj = ReceiverInfo(receiver, time.time())
+      if receiver_id not in self.receivers:
+        self.persist(new_obj)
+        return new_obj
+      else:
+        old_obj = pickle.loads(self.receivers[receiver_id])
+        self.refresh(old_obj, new_obj)
+        return old_obj
